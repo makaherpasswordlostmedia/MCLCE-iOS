@@ -24,7 +24,7 @@ mkdir -p "$LOG_DIR"
 # Locate iOS SDK + clang. CI runner has Xcode 15.x, we use iPhoneOS SDK.
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 CXX="$(xcrun --sdk iphoneos -f clang++)"
-ARCH="-arch arm64 -isysroot $SDK -mios-version-min=14.0"
+ARCH="-arch arm64 -isysroot $SDK -mios-version-min=10.0 -fno-aligned-allocation -D_LIBCPP_DISABLE_AVAILABILITY=1"
 
 # Same compile flags as the WorldProbe target.
 CXXFLAGS="-std=c++14 -fdeclspec -fsyntax-only \
