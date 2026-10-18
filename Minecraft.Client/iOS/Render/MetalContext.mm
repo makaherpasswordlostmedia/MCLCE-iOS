@@ -1597,6 +1597,17 @@ extern "C" int mcle_metal_ensure_device(void) {
         NSLog(@"[mcle_metal] no Metal device");
         return 1;
     }
+    // Capability log. A7 (iPad Air 1 / iPhone 5s) is GPUFamily1 only: no
+    // ASTC, 8192 max texture, no memoryless. Shows up in device console so
+    // we can see exactly what the GPU reports instead of guessing.
+    {
+        const char* best = "none";
+        if ([g.device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v1]) best = "iOS_GPUFamily1_v1";
+        if ([g.device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v2]) best = "iOS_GPUFamily1_v2";
+        if ([g.device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily1_v3]) best = "iOS_GPUFamily1_v3";
+        if ([g.device supportsFeatureSet:MTLFeatureSet_iOS_GPUFamily2_v1]) best = "iOS_GPUFamily2_v1+";
+        NSLog(@"[mcle_metal] device=%@ featureSet=%s", g.device.name, best);
+    }
     g.queue = [g.device newCommandQueue];
     if (!g.queue) {
         NSLog(@"[mcle_metal] failed to create command queue");
