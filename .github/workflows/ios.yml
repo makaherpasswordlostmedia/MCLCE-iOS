@@ -44,6 +44,7 @@ jobs:
           # rustup is preinstalled on macos-14 runners.
           rustup default stable
           rustup target add aarch64-apple-ios
+          echo "IPHONEOS_DEPLOYMENT_TARGET=10.0" >> "$GITHUB_ENV"
           rustc --version
           cargo --version
 
@@ -67,6 +68,9 @@ jobs:
             cargo-target-ios-
 
       - name: Build ruffle_ios static library for iOS ARM64
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "10.0"
+          RUSTFLAGS: "-C link-arg=-miphoneos-version-min=10.0"
         run: |
           cd third_party/ruffle_ios
           cargo build --release --target aarch64-apple-ios
@@ -88,12 +92,28 @@ jobs:
             -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
             -DPLATFORM=OS64 \
-            -DDEPLOYMENT_TARGET=14.0 \
+            -DDEPLOYMENT_TARGET=10.0 \
             -DENABLE_WORLD_PROBE=ON
 
       - name: Build (Release)
         run: |
           cmake --build build --config Release -- -quiet
+
+      - name: Verify iOS 10 / arm64 binary
+        run: |
+          set -euo pipefail
+          BIN="build/Minecraft.Client/iOS/App/Release-iphoneos/Minecraft.LCE.app/Minecraft.LCE"
+          lipo -info "$BIN"
+          # iOS 10 dyld only understands LC_VERSION_MIN_IPHONEOS; it rejects
+          # or mis-handles LC_BUILD_VERSION with a newer minos.
+          otool -l "$BIN" | grep -A4 -E "LC_VERSION_MIN_IPHONEOS|LC_BUILD_VERSION" || true
+          if ! otool -l "$BIN" | grep -q LC_VERSION_MIN_IPHONEOS; then
+            echo "::warning::binary has no LC_VERSION_MIN_IPHONEOS (LC_BUILD_VERSION only) - iOS 10 may refuse to launch it"
+          fi
+          /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" \
+            "build/Minecraft.Client/iOS/App/Release-iphoneos/Minecraft.LCE.app/Info.plist"
+          echo "--- dylibs the app links against ---"
+          otool -L "$BIN"
 
       - name: Package .ipa
         id: package
@@ -162,7 +182,7 @@ jobs:
             -G Xcode \
             -DCMAKE_TOOLCHAIN_FILE="$PWD/cmake/ios.toolchain.cmake" \
             -DPLATFORM=OS64 \
-            -DDEPLOYMENT_TARGET=14.0 \
+            -DDEPLOYMENT_TARGET=10.0 \
             -DENABLE_WORLD_PROBE=ON \
             -DENABLE_WORLD_PROBE_LINK=ON
 
