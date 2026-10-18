@@ -639,15 +639,24 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
     NSLog(@"[MinecraftVC] splash -> %@", picked);
 }
 
-- (void)viewSafeAreaInsetsDidChange {
-    [super viewSafeAreaInsetsDidChange];
-    // Keep the overlay label inside the safe area so notches do not clip it.
+// Shared by the iOS 11+ safe-area callback and the iOS 10 layout path.
+// iOS 10 has no safeAreaInsets (calling it is an unrecognized selector
+// crash), and no notched devices exist there, so insets are zero.
+- (void)mcleLayoutStatusLabel {
     CGRect b = self.view.bounds;
-    UIEdgeInsets s = self.view.safeAreaInsets;
+    UIEdgeInsets s = UIEdgeInsetsZero;
+    if (@available(iOS 11.0, *)) {
+        s = self.view.safeAreaInsets;
+    }
     self.statusLabel.frame = CGRectMake(
         s.left + 16, s.top + 12,
         b.size.width  - s.left - s.right  - 32,
         b.size.height - s.top  - s.bottom - 24);
+}
+
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];  // only called on iOS 11+
+    [self mcleLayoutStatusLabel];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -849,6 +858,8 @@ extern "C" unsigned long long mcle_swf_total_fill_bitmaps(void);
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    // iOS 10 never sends viewSafeAreaInsetsDidChange, so lay out here too.
+    [self mcleLayoutStatusLabel];
     CGSize sz = self.metalView.bounds.size;
     CGFloat scale = self.view.window.screen.nativeScale ?: UIScreen.mainScreen.nativeScale;
     mcle_render_resize((int)(sz.width * scale), (int)(sz.height * scale));
