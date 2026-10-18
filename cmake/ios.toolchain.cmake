@@ -23,7 +23,7 @@ if(NOT DEFINED PLATFORM)
   set(PLATFORM "OS64")
 endif()
 
-set(DEPLOYMENT_TARGET "14.0" CACHE STRING "iOS deployment target")
+set(DEPLOYMENT_TARGET "10.0" CACHE STRING "iOS deployment target")
 
 if(PLATFORM STREQUAL "OS64")
   set(SDK_NAME iphoneos)
@@ -96,6 +96,17 @@ set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
 # CMAKE_SYSTEM_NAME everywhere.
 set(PLATFORM_IOS TRUE)
 add_compile_definitions(PLATFORM_IOS=1 _IOS=1)
+
+# iOS 10 back-deployment (64-bit only, arm64 / A7+).
+# - libc++ marks several C++17 library features as iOS 11+/12+/13+ only; the
+#   availability errors are disabled so the code compiles. Do NOT call
+#   std::filesystem / std::variant / std::optional::value / to_chars etc. on
+#   the iOS 10 path - they are missing from the iOS 10 system libc++.
+# - aligned operator new is iOS 11+, fall back to plain new.
+if(DEPLOYMENT_TARGET VERSION_LESS 13.0)
+  add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY=1 MCLE_IOS_MIN_12=1)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-fno-aligned-allocation>)
+endif()
 
 message(STATUS "iOS toolchain:")
 message(STATUS "  PLATFORM            : ${PLATFORM}")
