@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <GameController/GameController.h>
+#import <QuartzCore/QuartzCore.h>  // CACurrentMediaTime
 
 #include "INP_iOS_Bridge.h"
 
@@ -18,12 +19,21 @@ constexpr int kMaxPads = 4;
 std::mutex g_mu;
 mcle_ios_pad_state g_state[kMaxPads] = {};
 
+// iOS < 13 has no buttonMenu / buttonOptions. MFi pads there only expose
+// controllerPausedHandler, which fires once per press with no release.
+// Hold START for a short time so the per-frame 4J poll sees a real press.
+std::atomic<int64_t> g_pauseHoldUntilMs[kMaxPads];
+
+int64_t now_ms() {
+    return (int64_t)(CACurrentMediaTime() * 1000.0);
+}
+
 id g_connectObserver = nil;
 id g_disconnectObserver = nil;
 
 // Convert a GCExtendedGamepad snapshot to our bitmask + axes.
 // Safe to call on any thread; result is copied into g_state under lock.
-mcle_ios_pad_state snapshot(GCExtendedGamepad* p) {
+mcle_ios_pad_state snapshot(GCExtendedGamepad* p, int slot) {
     mcle_ios_pad_state s = {};
     s.connected = 1;
 
@@ -35,12 +45,16 @@ mcle_ios_pad_state snapshot(GCExtendedGamepad* p) {
     if (p.leftShoulder.pressed)  s.buttons |= _360_JOY_BUTTON_LB;
     if (p.rightShoulder.pressed) s.buttons |= _360_JOY_BUTTON_RB;
 
-    // Menu / options (iOS 13+). Fall back quietly if missing.
+    // Menu / options (iOS 13+). Older iOS: START comes from the pause
+    // handler below, BACK / thumb clicks do not exist on MFi pads.
     if (@available(iOS 13.0, *)) {
         if (p.buttonMenu.pressed)    s.buttons |= _360_JOY_BUTTON_START;
         if (p.buttonOptions.pressed) s.buttons |= _360_JOY_BUTTON_BACK;
         if (p.leftThumbstickButton.pressed)  s.buttons |= _360_JOY_BUTTON_LTHUMB;
         if (p.rightThumbstickButton.pressed) s.buttons |= _360_JOY_BUTTON_RTHUMB;
+    } else if (slot >= 0 && slot < kMaxPads &&
+               now_ms() < g_pauseHoldUntilMs[slot].load()) {
+        s.buttons |= _360_JOY_BUTTON_START;
     }
 
     if (p.dpad.up.pressed)    s.buttons |= _360_JOY_BUTTON_DPAD_UP;
@@ -79,8 +93,34 @@ void hook_pad(GCController* controller, int slot) {
     GCExtendedGamepad* pad = controller.extendedGamepad;
     if (!pad) return;
 
+    if (@available(iOS 13.0, *)) {
+        // buttonMenu is read directly in snapshot().
+    } else {
+        // controllerPausedHandler is deprecated from iOS 13 but is the only
+        // Menu/Start source on iOS 7-12.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        controller.controllerPausedHandler = ^(GCController* c) {
+            g_pauseHoldUntilMs[slot].store(now_ms() + 120);
+            // Nothing else fires on release, so push a fresh snapshot now
+            // and one after the hold window expires.
+            GCExtendedGamepad* gp = c.extendedGamepad;
+            if (!gp) return;
+            mcle_ios_pad_state s = snapshot(gp, slot);
+            { std::lock_guard<std::mutex> lk(g_mu); g_state[slot] = s; }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 150 * NSEC_PER_MSEC),
+                           dispatch_get_main_queue(), ^{
+                GCExtendedGamepad* gp2 = c.extendedGamepad;
+                if (!gp2) return;
+                mcle_ios_pad_state s2 = snapshot(gp2, slot);
+                std::lock_guard<std::mutex> lk(g_mu); g_state[slot] = s2;
+            });
+        };
+#pragma clang diagnostic pop
+    }
+
     pad.valueChangedHandler = ^(GCExtendedGamepad* gp, GCControllerElement* _Nonnull) {
-        mcle_ios_pad_state s = snapshot(gp);
+        mcle_ios_pad_state s = snapshot(gp, slot);
         std::lock_guard<std::mutex> lk(g_mu);
         g_state[slot] = s;
     };
