@@ -14,7 +14,7 @@
       "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
       "cacheVariables": {
         "PLATFORM": "OS64",
-        "DEPLOYMENT_TARGET": "14.0"
+        "DEPLOYMENT_TARGET": "10.0"
       }
     },
     {
@@ -25,7 +25,7 @@
       "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
       "cacheVariables": {
         "PLATFORM": "SIMULATORARM64",
-        "DEPLOYMENT_TARGET": "14.0"
+        "DEPLOYMENT_TARGET": "10.0"
       }
     },
     {
@@ -36,7 +36,7 @@
       "toolchainFile": "${sourceDir}/cmake/ios.toolchain.cmake",
       "cacheVariables": {
         "PLATFORM": "SIMULATOR64",
-        "DEPLOYMENT_TARGET": "14.0"
+        "DEPLOYMENT_TARGET": "10.0"
       }
     }
   ],
